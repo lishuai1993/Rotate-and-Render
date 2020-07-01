@@ -1,5 +1,6 @@
 python -u test_multipose.py  \
         --names rs_model \
+        --save_path ./results/cueimg/\
         --dataset example \
         --list_start 0 \
         --list_end  10 \
@@ -19,5 +20,5 @@ python -u test_multipose.py  \
         --label_mask \
         --align \
         --erode_kernel 21 \
-        --yaw_poses 0 30 \
+        --yaw_poses -60\
 

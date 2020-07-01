@@ -35,7 +35,7 @@ def create_paths(save_path, img_path, foldername='orig', folderlevel=2, pose='0'
     for level in range(len(path_split) - folderlevel, len(path_split)):
         file_name = path_split[level]
         if level == len(path_split) - 1:
-            file_name = str(pose) + '_' + file_name
+            file_name =  file_name.split('.')[0] + '_' + str(pose) + '.jpg'
         rotated_file_savepath = os.path.join(rotated_file_savepath, file_name)
     return rotated_file_savepath
 
@@ -158,7 +158,6 @@ if __name__ == '__main__':
             poses = data['pose_list']
             rotated_landmarks = data['rotated_landmarks'][:, :, :2].cpu().numpy().astype(np.float)
             rotated_landmarks_106 = data['rotated_landmarks_106'][:, :, :2].cpu().numpy().astype(np.float)
-
 
             generate_rotateds = []
             for model in models:

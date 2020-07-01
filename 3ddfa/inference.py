@@ -31,6 +31,7 @@ from utils.render import get_depths_image, cget_depths_image, cpncc, crender_col
 from utils.paf import gen_img_paf
 import argparse
 import torch.backends.cudnn as cudnn
+import glob
 
 STD_SIZE = 120
 
@@ -80,7 +81,7 @@ def main(args):
 
         # face alignment model use RGB as input, result is a tuple with landmarks and boxes
         preds = alignment_model.get_landmarks(img_ori[:, :, ::-1])
-        pts_2d_68 = preds[0][0]
+        pts_2d_68 = preds[0]
         pts_2d_5 = get_5lmk_from_68lmk(pts_2d_68)
         landmark_list.append(pts_2d_5)
         roi_box = parse_roi_box_from_landmark(pts_2d_68.T)
@@ -98,7 +99,7 @@ def main(args):
             param = param.squeeze().cpu().numpy().flatten().astype(np.float32)
 
         # 68 pts
-        pts68 = predict_68pts(param, roi_box)
+        pts68 = predict_68pts(param, roi_box)               # 为什么第二次
 
         # two-step for more accurate bbox to crop face
         if args.bbox_init == 'two':
@@ -122,7 +123,7 @@ def main(args):
         # dense face 3d vertices
         vertices = predict_dense(param, roi_box)
 
-        if args.dump_2d_img:
+        if args.dump_2d_img:                # 人脸区域的2d图像
             wfp_2d_img = os.path.join(args.save_dir, os.path.basename(img_fp))
             colors = get_colors(img_ori, vertices)
             # aligned_param = get_aligned_param(param)
@@ -137,7 +138,7 @@ def main(args):
             this_param = param * param_std + param_mean
             this_param = np.concatenate((this_param, roi_box))
             this_param.tofile(save_name, sep=' ')
-    if args.dump_lmk:
+    if args.dump_lmk:                   # 存储
         save_path = os.path.join(args.save_lmk_dir, 'realign_lmk')
         with open(save_path, 'w') as f:
             for idx, (fname, land) in enumerate(zip(img_list, landmark_list)):
@@ -146,6 +147,22 @@ def main(args):
                 land_str = ' '.join([str(x) for x in land])
                 msg = f'{fname} {idx} {land_str}\n'
                 f.write(msg)
+
+
+def GenFileList(dir_path, file_path, string=None, opt="in"):
+    assert os.path.exists(dir_path), "the path of {} don't exists".format(dir_path)
+    file_list = os.listdir(dir_path)
+    with open(file_path, 'w') as fp:
+        for file in file_list:
+            if isinstance(string, str):
+                if opt == 'in':
+                    if string in file:
+                        fp.write(file + '\n')
+                elif opt == "not":
+                    if string not in file:
+                        fp.write(file + '\n')
+            elif string is None:
+                fp.write(file + '\n')
 
 
 if __name__ == '__main__':
@@ -165,5 +182,5 @@ if __name__ == '__main__':
     parser.add_argument('--resume_idx', default=0, type=int)
 
     args = parser.parse_args()
+    GenFileList(args.img_prefix, args.img_list, string=None, opt="in")                 # 自动生成相应的文件列表文件
     main(args)
-
