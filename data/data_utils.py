@@ -35,7 +35,7 @@ def get_input(data, render):
 def get_test_input(data, render):
     real_image = data['image']
     rotated_mesh, rotate_landmarks, original_angles\
-        = render.rotate_render(data['param_path'], real_image, data['M'])
+        = render.rotate_render(data['param_path'], real_image, data['M'])       # 全部重点在这里了。
     output = {}
     real_image = real_image * 2 - 1
     rotated_mesh = rotated_mesh * 2 - 1
@@ -62,7 +62,7 @@ def get_multipose_test_input(data, render, yaw_poses, pitch_poses):
         for pose in poses:
             if i == 0:
                 rotated_mesh, rotate_landmarks, original_angles, rotate_landmarks_106\
-                    = render.rotate_render(data['param_path'], real_image, data['M'], yaw_pose=pose)
+                    = render.rotate_render(data['param_path'], real_image, data['M'], yaw_pose=pose)   # 输入是66个3D的浮点数，3*256*256图像，
             else:
                 rotated_mesh, rotate_landmarks, original_angles, rotate_landmarks_106\
                     = render.rotate_render(data['param_path'], real_image, data['M'], pitch_pose=pose)
@@ -81,12 +81,12 @@ def get_multipose_test_input(data, render, yaw_poses, pitch_poses):
     real_image = real_image * 2 - 1
     rotated_meshs = rotated_meshs * 2 - 1
     output['image'] = real_image.cpu()
-    output['rotated_mesh'] = rotated_meshs.cpu()
-    output['rotated_landmarks'] = rotated_landmarks_list.cpu()
-    output['rotated_landmarks_106'] = rotated_landmarks_list_106.cpu()
-    output['original_angles'] = original_angles_list.cpu()
+    output['rotated_mesh'] = rotated_meshs.cpu()    # 3*256*256
+    output['rotated_landmarks'] = rotated_landmarks_list.cpu()   # 68*3
+    output['rotated_landmarks_106'] = rotated_landmarks_list_106.cpu()  # 106*3
+    output['original_angles'] = original_angles_list.cpu()       # 一个浮点数，
     output['path'] = paths
-    output['pose_list'] = pose_list
+    output['pose_list'] = pose_list                             # 目标角度，9个以y轴为旋转轴的人脸角度。
     return output
 
 
@@ -108,7 +108,7 @@ class data_prefetcher():
             self.next_input = get_input(data, self.render_layer)
         elif self.opt.yaw_poses is None and self.opt.pitch_poses is None:
             self.next_input = get_test_input(data, self.render_layer)
-        else:
+        else:                                                           # 执行这一步
             if self.opt.yaw_poses is not None:
                 if self.opt.posesrandom:
                     self.opt.yaw_poses = [round(np.random.uniform(-0.5, 0.5, 1)[0], 2) for k in range(len(self.opt.yaw_poses))]
@@ -121,7 +121,7 @@ class data_prefetcher():
             else:
                 self.opt.pitch_poses = []
                 
-            self.next_input = get_multipose_test_input(data, self.render_layer, self.opt.yaw_poses, self.opt.pitch_poses)
+            self.next_input = get_multipose_test_input(data, self.render_layer, self.opt.yaw_poses, self.opt.pitch_poses)   # 关键步骤
         with torch.cuda.stream(self.stream):
             for k, v in self.next_input.items():
                 if type(v) == torch.Tensor:
@@ -133,17 +133,17 @@ class data_prefetcher():
 
         if input is not None:
             for k in input.keys():
-                if type(input[k]) == torch.Tensor:
+                if type(input[k]) == torch.Tensor:          # 转换成cuda数据，并传送给后面程序
                     input[k].record_stream(torch.cuda.current_stream())
         self.preload()
         return input
 
 
-def prefetch_data(queue, dataloader, iter_counter, opt, render_layer):
+def prefetch_data(queue, dataloader, iter_counter, opt, render_layer):          # 抓取数据，是在子进程中执行的过程
     print("start prefetching data...")
     np.random.seed(os.getpid())
     for epoch in iter_counter.training_epochs():
-        prefetcher = data_prefetcher(dataloader, opt, render_layer)
+        prefetcher = data_prefetcher(dataloader, opt, render_layer)             # 生成一个迭代器
         input = prefetcher.next()
         while input is not None:
             try:

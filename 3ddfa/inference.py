@@ -79,12 +79,12 @@ def main(args):
         ind = 0
         suffix = get_suffix(img_fp)
 
-        # face alignment model use RGB as input, result is a tuple with landmarks and boxes
+        # face alignment model use RGB as input, result is a tuple with landmarks and boxes, cv2读取图片的书序是 BGR
         preds = alignment_model.get_landmarks(img_ori[:, :, ::-1])
         pts_2d_68 = preds[0]
         pts_2d_5 = get_5lmk_from_68lmk(pts_2d_68)
         landmark_list.append(pts_2d_5)
-        roi_box = parse_roi_box_from_landmark(pts_2d_68.T)
+        roi_box = parse_roi_box_from_landmark(pts_2d_68.T)      # 根据68个关键点，确定roi区域
 
         img = crop_img(img_ori, roi_box)
         # import pdb; pdb.set_trace()
@@ -95,11 +95,11 @@ def main(args):
         with torch.no_grad():
             if args.mode == 'gpu':
                 input = input.cuda()
-            param = model(input)
+            param = model(input)                        # 人脸的RT矩阵，形状和表情的系数
             param = param.squeeze().cpu().numpy().flatten().astype(np.float32)
 
         # 68 pts
-        pts68 = predict_68pts(param, roi_box)               # 为什么第二次
+        pts68 = predict_68pts(param, roi_box)                   # 此时pts68是一个68*3的顶点坐标列表
 
         # two-step for more accurate bbox to crop face
         if args.bbox_init == 'two':

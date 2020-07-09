@@ -1,5 +1,7 @@
-from models.networks.render import *
-
+# from models.networks.render import *
+from .render import *
+import numpy as np
+import cv2
 
 def _get_suffix(filename):
     """a.jpg -> jpg"""
@@ -46,13 +48,14 @@ class TestRender(Render):
         vertices_aligned_out = []
         vertices_ori_normal = []
         texs = []
+        imgtemp = 0
         original_angles = torch.zeros(bz)
         with torch.no_grad():
             for n in range(bz):
                 tex_a, vertice, vertice_out, vertice_in_ori_img, align_vertice, original_angle \
                     = self._forward(params[n], images[n], M[n],
                                     pose_noise=pose_noise, align=align, frontal=frontal, 
-                                    yaw_pose=yaw_pose, pitch_pose=pitch_pose)
+                                    yaw_pose=yaw_pose, pitch_pose=pitch_pose)                       # 完成了3d fitting、Rotate，
                 vertices.append(vertice)
                 vertices_out.append(vertice_out)
                 vertices_in_ori_img.append(vertice_in_ori_img.clone())
@@ -76,8 +79,29 @@ class TestRender(Render):
             # erode the original mask and render again
             rendered_images_erode = None
             if erode:
-                with torch.cuda.device(self.current_gpu):
+                with torch.cuda.device(self.current_gpu):               # 这里的vertices_ori_normal是已经按照目标姿态旋转过的顶点模型 ？
                     rendered_images, depths, masks, = self.renderer(vertices_ori_normal, self.faces_use, texs)  # rendered_images: batch * 3 * h * w, masks: batch * h * w
+                imgtemp = rendered_images.data[0].cpu().numpy()
+                imgtemp = (np.transpose(imgtemp, (1,2,0)) * 255).astype(np.int)
+                imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
+                imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
+                imgtemp = imgtemp[:, :, [2,1, 0]]
+                cv2.imwrite("./imgtemp.jpg", imgtemp)
+
+                imgtemp = masks.data.cpu().numpy()
+                imgtemp = (np.transpose(imgtemp, (1, 2, 0)) * 255).astype(np.int)
+                imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
+                imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
+                imgtemp = np.repeat(imgtemp, 3, axis=2)
+                cv2.imwrite("./mask.jpg", imgtemp)
+
+                imgtemp = depths.data.cpu().numpy()
+                imgtemp = np.transpose(imgtemp, (1, 2, 0)).astype(np.int)
+                imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
+                imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
+                imgtemp = np.repeat(imgtemp, 3, axis=2)
+                cv2.imwrite("./depths.jpg", imgtemp)
+
                 masks_erode = self.generate_erode_mask(masks, kernal_size=15)
                 rendered_images = rendered_images.cpu()
                 if grey_background:
@@ -104,8 +128,28 @@ class TestRender(Render):
             # render face to rotated pose
             with torch.no_grad():
                 with torch.cuda.device(self.current_gpu):
-                    rendered_images, depths, masks, = self.renderer(vertices, self.faces_use, texs)
+                    rendered_images, depths, masks, = self.renderer(vertices, self.faces_use, texs)     # 53215*3， 105840*3， 105840*2*2*2*3
+                    # 是Render的过程，但不是render-to-image的过程，还没有对人脸中错误的像素渲染结果进行修正
+                imgtemp = rendered_images.data[0].cpu().numpy()
+                imgtemp = (np.transpose(imgtemp, (1, 2, 0)) * 255).astype(np.int)
+                imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
+                imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
+                imgtemp = imgtemp[:, :, [2, 1, 0]]
+                cv2.imwrite("./imgtemp_0.jpg", imgtemp)
 
+                imgtemp = masks.data.cpu().numpy()
+                imgtemp = (np.transpose(imgtemp, (1, 2, 0)) * 255).astype(np.int)
+                imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
+                imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
+                imgtemp = np.repeat(imgtemp, 3, axis=2)
+                cv2.imwrite("./mask_0.jpg", imgtemp)
+
+                imgtemp = depths.data.cpu().numpy()
+                imgtemp = np.transpose(imgtemp, (1, 2, 0)).astype(np.int)
+                imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
+                imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
+                imgtemp = np.repeat(imgtemp, 3, axis=2)
+                cv2.imwrite("./depths_0.jpg", imgtemp)
             # rendered_images = rendered_images.cpu()
             #
             # # get rendered face vertices

@@ -14,11 +14,11 @@ def parse_pose(param):
     param = param * param_std + param_mean
     Ps = param[:12].reshape(3, -1)  # camera matrix
     # R = P[:, :3]
-    s, R, t3d = P2sRt(Ps)
+    s, R, t3d = P2sRt(Ps)           # 缩放因子，旋转矩阵，3d平移
     R.tofile('pose.txt', sep=' ')
     P = np.concatenate((R, t3d.reshape(3, -1)), axis=1)  # without scale
     # P = Ps / s
-    pose = matrix2angle(R)  # yaw, pitch, roll
+    pose = matrix2angle(R)  # yaw, pitch, roll， 返回在x,y,z三个轴上的旋转角度，应该是弧度值
     # offset = p_[:, -1].reshape(3, 1)
     return P, pose
 

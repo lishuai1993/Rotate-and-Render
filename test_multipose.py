@@ -84,7 +84,7 @@ if __name__ == '__main__':
 
     dataloaders = data.create_dataloader_test(opt)
 
-    visualizer = Visualizer(opt)
+    visualizer = Visualizer(opt)        # 将结果打印在命令行中
     iter_counter = IterationCounter(opt, len(dataloaders[0]) * opt.render_thread)
     # create a webpage that summarizes the all results
 
@@ -114,12 +114,12 @@ if __name__ == '__main__':
         save_paths = [save_path]
         f = [open(
                 os.path.join(save_path, opt.dataset + str(opt.list_start) + str(opt.list_end) + '_rotate_lmk.txt'), 'w')]
-    else:
+    else:           # 走这一支
         models = []
         names = []
         save_paths = []
         f = []
-        for name in opt.names.split(','):
+        for name in opt.names.split(','):           # 目前只有一个model
             opt.name = name
             model = TestModel(opt)
             model.eval()
@@ -136,6 +136,7 @@ if __name__ == '__main__':
             f.append(f_rotated)
 
     test_tasks = init_parallel_jobs(testing_queue, dataloaders, iter_counter, opt, render_layer_list)
+    # 作用，向队列中放入原始图像，旋转后的mesh、关键点、106个关键点，以及原始角度，目标角度。
     # test
     landmarks = []
 
@@ -161,7 +162,20 @@ if __name__ == '__main__':
 
             generate_rotateds = []
             for model in models:
-                generate_rotated = model.forward(data, mode='single')
+                img_org = (data['rotated_mesh'][0].data.cpu().numpy()*255).astype(np.int)
+                img_org = np.minimum(img_org, 255)
+                img_org = np.maximum(img_org, 0)
+                img_org4 = np.transpose(img_org, (1,2, 0))[:,:,[1,0, 2]]
+                cv2.imwrite("./img_org4.jpg", img_org4)
+
+                # 人脸已经完成旋转，并且在图像域，是render_to_image的过程
+                generate_rotated = model.forward(data, mode='single')       # 将人脸中错误的像素点进行修正，
+                img_rotate = (generate_rotated[0].data.cpu().numpy()*255).astype(np.int)
+                img_rotate = np.minimum(img_rotate, 255)
+                img_rotate = np.maximum(img_rotate, 0)
+                img_rotate = np.transpose(img_rotate, (1, 2, 0))[:,:,[0,2, 1]]
+                cv2.imwrite("./img_rotate.jpg", img_rotate)
+
                 generate_rotateds.append(generate_rotated)
 
             for n, name in enumerate(names):

@@ -225,7 +225,7 @@ def draw_landmarks(img, pts, style='fancy', wfp=None, show_flg=False, **kwargs):
 
 def get_colors(image, vertices):
     [h, w, _] = image.shape
-    vertices[0, :] = np.minimum(np.maximum(vertices[0, :], 0), w - 1)  # x
+    vertices[0, :] = np.minimum(np.maximum(vertices[0, :], 0), w - 1)  # x，先是对坐标范围进行限制
     vertices[1, :] = np.minimum(np.maximum(vertices[1, :], 0), h - 1)  # y
     ind = np.round(vertices).astype(np.int32)
     colors = image[ind[1, :], ind[0, :], :]  # n x 3

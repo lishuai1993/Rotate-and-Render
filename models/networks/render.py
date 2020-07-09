@@ -119,16 +119,17 @@ class Render(object):
         self.pose_noise = getattr(opt, 'pose_noise', False)
         self.large_pose = getattr(opt, 'large_pose', False)
         u = u_shp + u_exp
-        tri = sio.loadmat('./3ddfa/visualize/tri.mat')['tri']   # 3 * 53215
+        tri = sio.loadmat('./3ddfa/visualize/tri.mat')['tri']
         faces_np = np.expand_dims(tri.T, axis=0).astype(np.int32) - 1
 
         self.std_size = 120
 
         self.current_gpu = opt.gpu_ids
         with torch.cuda.device(self.current_gpu):
-            self.faces = torch.from_numpy(faces_np).cuda()
+            self.faces = torch.from_numpy(faces_np).cuda()                  # faces 是面元的意思
+
             self.renderer = nr.Renderer(camera_mode='look', image_size=self.render_size, perspective=False,
-                                        light_intensity_directional=0, light_intensity_ambient=1)
+                                        light_intensity_directional=0, light_intensity_ambient=1)          # 实现3d人脸表示到2d图像的映射，
             self.u_cuda = torch.from_numpy(u.astype(np.float32)).cuda()
             self.w_shp_cuda = torch.from_numpy(w_shp.astype(np.float32)).cuda()
             self.w_exp_cuda = torch.from_numpy(w_exp.astype(np.float32)).cuda()
@@ -165,8 +166,21 @@ class Render(object):
 
     def _parse_param(self, param, pose_noise=False, frontal=True, 
                      large_pose=False, yaw_pose=None, pitch_pose=None):
-        """Work for both numpy and tensor"""
-        p_ = param[:12].reshape(3, -1)
+        """
+        在解析参数的过程中，完成了人脸角度的 rotate
+        Work for both numpy and tensor
+        Args:
+            param:
+            pose_noise:
+            frontal:
+            large_pose:
+            yaw_pose:                       # 目标角度
+            pitch_pose:
+
+        Returns:                            返回的P已经是rotate之后的旋转矩阵
+
+        """
+        p_ = param[:12].reshape(3, -1)          # 旋转矩阵+平移矩阵
         p = p_[:, :3]
         s, R, t3d = P2sRt(p_)
         angle = matrix2angle(R)
@@ -176,13 +190,13 @@ class Render(object):
             # if yaw_pose is not None:
                 # angle[0] = yaw_pose
                 # flag = -1 if angle[0] < 0 else 1
-            angle[0] = yaw_pose
+            angle[0] = yaw_pose                                         # 替换以y轴为旋转轴，图像在水平方向进行旋转的目标角度
             if pitch_pose is not None:
                 flag = -1 if angle[1] < 0 else 1
                 angle[1] = flag * abs(pitch_pose)
             elif angle[1] < 0:
                 angle[1] = 0
-            p = angle2matrix(angle) * s
+            p = angle2matrix(angle) * s                                 # 将目标角度，转换为旋转矩阵
         else:
             if frontal:
                 angle[0] = 0
@@ -233,7 +247,7 @@ class Render(object):
         # tex_input: (B, N, 2, 2, 2, C)
         # faces: (faceN, 3)
         faces = faces.long()
-        tex_out = tex_input[:, faces[0, :, 0], :] + tex_input[:, faces[0, :, 1], :] + tex_input[:, faces[0, :, 2], :]
+        tex_out = tex_input[:, faces[0, :, 0], :] + tex_input[:, faces[0, :, 1], :] + tex_input[:, faces[0, :, 2], :]       #得到每一个三角形的中心的颜色表示
         return tex_out/3.0
 
     def compute_tri_normal(self, vertex, tri):
@@ -298,9 +312,28 @@ class Render(object):
     def generate_vertices_and_rescale_to_img(self, param, pose_noise=False,
             mean_shp=False, mean_exp=False, frontal=True, large_pose=False, 
             yaw_pose=None, pitch_pose=None):
+        """
+
+        Args:                   # 根据 inference生成的结果文件，
+            param:              inference.py 生成的包含66个浮点数的结果文件
+            pose_noise:
+            mean_shp:
+            mean_exp:
+            frontal:
+            large_pose:
+            yaw_pose:
+            pitch_pose:
+
+        Returns:
+
+        """
+
+
+        # 从param文件中，解析数据， 返回的 p 是指定人脸角度的旋转矩阵，也就是姿态 b 的角度
         p, offset, alpha_shp, alpha_exp, roi_bbox, original_angle = self._parse_param(param, pose_noise=pose_noise,
                                                                                       frontal=frontal, large_pose=large_pose, 
                                                                                       yaw_pose=yaw_pose, pitch_pose=pitch_pose)
+
         if mean_shp:
             alpha_shp.fill(0.0)
         if mean_exp:
@@ -311,10 +344,12 @@ class Render(object):
             alpha_exp = torch.from_numpy(alpha_exp.astype(np.float32)).cuda()
             offset = torch.from_numpy(offset.astype(np.float32)).cuda()
 
+        # 3D 人脸模型数据， u_cuda, w_shp_cuda, w_exp_cuda，采用的是p.matmul，即将人脸模型顶点完成了旋转
         vertices = p.matmul((self.u_cuda + self.w_shp_cuda.matmul(alpha_shp) + self.w_exp_cuda.matmul(alpha_exp)).view(-1, 3).t()) + offset
-
+        # (self.u_cuda + self.w_shp_cuda.matmul(alpha_shp) + self.w_exp_cuda.matmul(alpha_exp)).view(-1, 3).t() 就是3d 人脸模型中的n个顶点
+        # 而经过计算后， vertices就是将3d的顶点旋转和平移之后的，映射到2d平面上，缩放步骤在后面。
         vertices[1, :] = self.std_size + 1 - vertices[1, :]
-        vertices = self.vertices_rescale(vertices, roi_bbox)
+        vertices = self.vertices_rescale(vertices, roi_bbox)            # 是2d 平面上的点，
 
         return vertices, original_angle
 
@@ -338,22 +373,23 @@ class Render(object):
 
         
         textures = img_ori[vertices_in_ori_img[1, :].round().clamp(0, h - 1).long(), \
-                   vertices_in_ori_img[0, :].round().clamp(0, w - 1).long(), :]
+                   vertices_in_ori_img[0, :].round().clamp(0, w - 1).long(), :]             # 获取每一个顶点所对应的纹理，最后用 ：，是因为是颜色的三通导值
 
         N = textures.shape[0]
         with torch.cuda.device(self.current_gpu):
             textures = textures.cuda().view(1, N, 1, 1, 1, 3)
         textures = textures.expand(1, N, 2, 2, 2, 3)
         textures = textures.float()
-        tex_a = self.texture_vertices_to_faces(textures, self.faces)
+        tex_a = self.texture_vertices_to_faces(textures, self.faces)                #
 
-        return tex_a
+        return tex_a                # 姿态 a 时的纹理， rotate很简单，只需要改变相关姿态P即可
 
 
     def _forward(self, param_file, img_ori, M=None,
                  pose_noise=True, mean_exp=False, mean_shp=False, align=True, frontal=True, 
                  large_pose=False, yaw_pose=None, pitch_pose=None):
         '''
+        获取人脸的3d顶点模型，
         img_ori: rgb image, normalized within 0-1, h * w * 3
         return: render image, bgr
         '''
@@ -375,10 +411,10 @@ class Render(object):
                 vertices = self.transform_vertices(M, vertices)
             vertices_in_ori_img = vertices.clone()
             align_vertices = vertices.clone()
-        else:
+        else:               # 走此分支，生成姿态 a 的顶点
             vertices_in_ori_img, _ = self.generate_vertices_and_rescale_to_img(param, pose_noise=False,
                                                                             mean_shp=False, mean_exp=False,
-                                                                            frontal=False, large_pose=False)
+                                                                            frontal=False, large_pose=False)            # 原始图像的顶点
             if M is not None:
                 vertices_in_ori_img = self.transform_vertices(M, vertices_in_ori_img)
             else:
@@ -408,7 +444,7 @@ class Render(object):
 
         # original image size is 400 * 400 * 3
         vertices_out = vertices.clone()
-        tex_a = self.get_render_from_vertices(img_ori, vertices_in_ori_img)
+        tex_a = self.get_render_from_vertices(img_ori, vertices_in_ori_img)             # 获取在 a 时的纹理
         vertices = self.flip_normalize_vertices(vertices)
         vertices_in_ori_img[:2, :] = vertices_in_ori_img[:2,
                                      :] / h * self.render_size

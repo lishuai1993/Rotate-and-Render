@@ -18,7 +18,7 @@ class TestModel(RotateSPADEModel):
 
 
     def forward(self, data, mode):
-        if mode == 'single':
+        if mode == 'single':                # 走这一支
             real_image = data['image']
             rotated_landmarks = data['rotated_landmarks']
             original_angles = data['original_angles']
