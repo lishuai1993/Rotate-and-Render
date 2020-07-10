@@ -81,7 +81,7 @@ def get_multipose_test_input(data, render, yaw_poses, pitch_poses):
     real_image = real_image * 2 - 1
     rotated_meshs = rotated_meshs * 2 - 1
     output['image'] = real_image.cpu()
-    output['rotated_mesh'] = rotated_meshs.cpu()    # 3*256*256
+    output['rotated_mesh'] = rotated_meshs.cpu().permute(0,3,1,2).contiguous()    # 3*256*256
     output['rotated_landmarks'] = rotated_landmarks_list.cpu()   # 68*3
     output['rotated_landmarks_106'] = rotated_landmarks_list_106.cpu()  # 106*3
     output['original_angles'] = original_angles_list.cpu()       # 一个浮点数，

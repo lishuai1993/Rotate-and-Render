@@ -7,7 +7,11 @@ from data import curve
 import skimage.transform as trans
 from math import *
 import sys
+sys.path.append(osp.abspath("3ddfa/utils"))
 import neural_renderer as nr
+from render import crender_colors
+
+
 
 
 
@@ -128,14 +132,14 @@ class Render(object):
         with torch.cuda.device(self.current_gpu):
             self.faces = torch.from_numpy(faces_np).cuda()                  # faces 是面元的意思
 
-            self.renderer = nr.Renderer(camera_mode='look', image_size=self.render_size, perspective=False,
-                                        light_intensity_directional=0, light_intensity_ambient=1)          # 实现3d人脸表示到2d图像的映射，
+            # self.renderer = nr.Renderer(camera_mode='look', image_size=self.render_size, perspective=False,
+            #                             light_intensity_directional=0, light_intensity_ambient=1)          # 实现3d人脸表示到2d图像的映射，
+            self.renderer = crender_colors
             self.u_cuda = torch.from_numpy(u.astype(np.float32)).cuda()
             self.w_shp_cuda = torch.from_numpy(w_shp.astype(np.float32)).cuda()
             self.w_exp_cuda = torch.from_numpy(w_exp.astype(np.float32)).cuda()
 
     def random_p(self, s, angle):
-
 
         if np.random.randint(0, 2) == 0:
             angle[0] += np.random.uniform(-0.965, -0.342, 1)[0]
@@ -376,9 +380,12 @@ class Render(object):
                    vertices_in_ori_img[0, :].round().clamp(0, w - 1).long(), :]             # 获取每一个顶点所对应的纹理，最后用 ：，是因为是颜色的三通导值
 
         N = textures.shape[0]
+        # with torch.cuda.device(self.current_gpu):
+        #     textures = textures.cuda().view(1, N, 1, 1, 1, 3)
+        # textures = textures.expand(1, N, 2, 2, 2, 3)
         with torch.cuda.device(self.current_gpu):
-            textures = textures.cuda().view(1, N, 1, 1, 1, 3)
-        textures = textures.expand(1, N, 2, 2, 2, 3)
+            textures = textures.cuda().view(1, N, 3)
+        textures = textures.expand(1, N, 3)
         textures = textures.float()
         tex_a = self.texture_vertices_to_faces(textures, self.faces)                #
 
@@ -501,8 +508,8 @@ class Render(object):
             if erode:
 
                 with torch.cuda.device(self.current_gpu):
-                    rendered_images, depths, masks, = self.renderer(vertices_ori_normal, self.faces_use, texs)  # rendered_images: batch * 3 * h * w, masks: batch * h * w
-                masks_erode = self.generate_erode_mask(masks, kernal_size=self.opt.erode_kernel)
+                    rendered_images, depths, masks, = self.renderer(vertices_ori_normal, self.faces_use, texs, 256, 256)  # rendered_images: batch * 3 * h * w, masks: batch * h * w
+                # masks_erode = self.generate_erode_mask(masks, kernal_size=self.opt.erode_kernel)
                 rendered_images = rendered_images.cpu()
                 Rd_a = rendered_images.clone()
                 if grey_background:
@@ -529,30 +536,30 @@ class Render(object):
 
             # render face to rotated pose
             with torch.cuda.device(self.current_gpu):
-                rendered_images, depths, masks, = self.renderer(vertices, self.faces_use, texs)
+                rendered_images = self.renderer(vertices, self.faces_use, texs, 256, 256)
 
             # add mask to rotated
-            masks_erode = self.generate_erode_mask(masks, kernal_size=5)
-            inv_masks_erode = (torch.ones_like(masks_erode) - masks_erode).float()
+            # masks_erode = self.generate_erode_mask(masks, kernal_size=5)
+            # inv_masks_erode = (torch.ones_like(masks_erode) - masks_erode).float()
             rendered_images = rendered_images.cpu()
-            if with_BG:
-                images = torch.nn.functional.interpolate(images, size=(self.render_size))
-                rendered_images = masks_erode * rendered_images + inv_masks_erode * images  # 3 * h * w
-            else:
-                if grey_background:
-                    if np.random.randint(0, 4):
-                        rendered_images = masks_erode * rendered_images
-                else:
-                    if avg_BG:
-                        contentsum = torch.sum(torch.sum(masks_erode * rendered_images, 3), 2)
-                        sumsum = torch.sum(torch.sum(masks_erode, 3), 2)
-                        contentsum[contentsum == 0] = 0.5
-                        sumsum[sumsum == 0] = 1
-                        masked_sum = contentsum / sumsum
-                        masked_BG = masked_sum.unsqueeze(2).unsqueeze(3).expand(rendered_images.size())
-                    else:
-                        masked_BG = 0.5
-                    rendered_images = masks_erode * rendered_images + inv_masks_erode * masked_BG
+            # if with_BG:
+            #     images = torch.nn.functional.interpolate(images, size=(self.render_size))
+            #     rendered_images = masks_erode * rendered_images + inv_masks_erode * images  # 3 * h * w
+            # else:
+            #     if grey_background:
+            #         if np.random.randint(0, 4):
+            #             rendered_images = masks_erode * rendered_images
+            #     else:
+            #         if avg_BG:
+            #             contentsum = torch.sum(torch.sum(masks_erode * rendered_images, 3), 2)
+            #             sumsum = torch.sum(torch.sum(masks_erode, 3), 2)
+            #             contentsum[contentsum == 0] = 0.5
+            #             sumsum[sumsum == 0] = 1
+            #             masked_sum = contentsum / sumsum
+            #             masked_BG = masked_sum.unsqueeze(2).unsqueeze(3).expand(rendered_images.size())
+            #         else:
+            #             masked_BG = 0.5
+            #         rendered_images = masks_erode * rendered_images + inv_masks_erode * masked_BG
 
             # get rendered face vertices
             texs_b = []
@@ -563,21 +570,21 @@ class Render(object):
 
             # render back
             with torch.cuda.device(self.current_gpu):
-                rendered_images_rotate, depths1, masks1, = self.renderer(vertices_ori_normal, self.faces_use, texs_b)  # rendered_images: batch * 3 * h * w, masks: batch * h * w
-                rendered_images_rotate_artifacts, depths1, masks1, = self.renderer(vertices_aligned_normal, self.faces_use, texs_old)  # rendered_images: batch * 3 * h * w, masks: batch * h * w
-                rendered_images_double, depths2, masks2, = self.renderer(vertices_aligned_normal, self.faces_use, texs_b)  # rendered_images: batch * 3 * h * w, masks: batch * h * w
+                rendered_images_rotate = self.renderer(vertices_ori_normal, self.faces_use, texs_b, 256, 256)  # rendered_images: batch * 3 * h * w, masks: batch * h * w
+                rendered_images_rotate_artifacts = self.renderer(vertices_aligned_normal, self.faces_use, texs_old, 256, 256)  # rendered_images: batch * 3 * h * w, masks: batch * h * w
+                rendered_images_double = self.renderer(vertices_aligned_normal, self.faces_use, texs_b, 256, 256)  # rendered_images: batch * 3 * h * w, masks: batch * h * w
 
 
-            masks2 = masks2.unsqueeze(1)
-            inv_masks2 = (torch.ones_like(masks2) - masks2).float().cpu()
-            BG = inv_masks2 * images
-            if grey_background:
-                masks1 = masks1.unsqueeze(1)
+            # masks2 = masks2.unsqueeze(1)
+            # inv_masks2 = (torch.ones_like(masks2) - masks2).float().cpu()
+            # BG = inv_masks2 * images
+            # if grey_background:
+            #     masks1 = masks1.unsqueeze(1)
+            #
+            #     inv_masks1 = (torch.ones_like(masks1) - masks1).float()
 
-                inv_masks1 = (torch.ones_like(masks1) - masks1).float()
-
-                rendered_images_rotate = (inv_masks1 * 0.5 + rendered_images_rotate).clamp(0, 1)
-                rendered_images_double = (inv_masks2 * 0.5 + rendered_images_double).clamp(0, 1)
+                # rendered_images_rotate = (inv_masks1 * 0.5 + rendered_images_rotate).clamp(0, 1)
+                # rendered_images_double = (inv_masks2 * 0.5 + rendered_images_double).clamp(0, 1)
 
 
         return rendered_images_rotate, rendered_images_double, \

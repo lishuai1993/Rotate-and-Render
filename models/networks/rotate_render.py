@@ -78,78 +78,78 @@ class TestRender(Render):
 
             # erode the original mask and render again
             rendered_images_erode = None
-            if erode:
-                with torch.cuda.device(self.current_gpu):               # 这里的vertices_ori_normal是已经按照目标姿态旋转过的顶点模型 ？
-                    rendered_images, depths, masks, = self.renderer(vertices_ori_normal, self.faces_use, texs)  # rendered_images: batch * 3 * h * w, masks: batch * h * w
-                imgtemp = rendered_images.data[0].cpu().numpy()
-                imgtemp = (np.transpose(imgtemp, (1,2,0)) * 255).astype(np.int)
-                imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
-                imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
-                imgtemp = imgtemp[:, :, [2,1, 0]]
-                cv2.imwrite("./imgtemp.jpg", imgtemp)
+            # if erode:
+            #     with torch.cuda.device(self.current_gpu):               # 这里的vertices_ori_normal是已经按照目标姿态旋转过的顶点模型 ？
+            #         rendered_images, depths, masks, = self.renderer(vertices_ori_normal, self.faces_use, texs, 224, 224)  # rendered_images: batch * 3 * h * w, masks: batch * h * w
+            #     imgtemp = rendered_images.data[0].cpu().numpy()
+            #     imgtemp = (np.transpose(imgtemp, (1,2,0)) * 255).astype(np.int)
+            #     imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
+            #     imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
+            #     imgtemp = imgtemp[:, :, [2,1, 0]]
+            #     cv2.imwrite("./imgtemp.jpg", imgtemp)
 
-                imgtemp = masks.data.cpu().numpy()
-                imgtemp = (np.transpose(imgtemp, (1, 2, 0)) * 255).astype(np.int)
-                imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
-                imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
-                imgtemp = np.repeat(imgtemp, 3, axis=2)
-                cv2.imwrite("./mask.jpg", imgtemp)
+                # imgtemp = masks.data.cpu().numpy()
+                # imgtemp = (np.transpose(imgtemp, (1, 2, 0)) * 255).astype(np.int)
+                # imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
+                # imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
+                # imgtemp = np.repeat(imgtemp, 3, axis=2)
+                # cv2.imwrite("./mask.jpg", imgtemp)
 
-                imgtemp = depths.data.cpu().numpy()
-                imgtemp = np.transpose(imgtemp, (1, 2, 0)).astype(np.int)
-                imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
-                imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
-                imgtemp = np.repeat(imgtemp, 3, axis=2)
-                cv2.imwrite("./depths.jpg", imgtemp)
+                # imgtemp = depths.data.cpu().numpy()
+                # imgtemp = np.transpose(imgtemp, (1, 2, 0)).astype(np.int)
+                # imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
+                # imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
+                # imgtemp = np.repeat(imgtemp, 3, axis=2)
+                # cv2.imwrite("./depths.jpg", imgtemp)
 
-                masks_erode = self.generate_erode_mask(masks, kernal_size=15)
-                rendered_images = rendered_images.cpu()
-                if grey_background:
-                    rendered_images_erode = masks_erode * rendered_images
-                else:
-                    inv_masks_erode = (torch.ones_like(masks_erode) - (masks_erode)).float()
-                    if avg_BG:
-                        contentsum = torch.sum(torch.sum(masks_erode * rendered_images, 3), 2)
-                        sumsum = torch.sum(torch.sum(masks_erode, 3), 2)
-                        contentsum[contentsum == 0] = 0.5
-                        sumsum[sumsum == 0] = 1
-                        masked_sum = contentsum / sumsum
-                        masked_BG = masked_sum.unsqueeze(2).unsqueeze(3).expand(rendered_images.size())
-                    else:
-                        masked_BG = 0.5
-                    rendered_images_erode = masks_erode * rendered_images + inv_masks_erode * masked_BG
+                # masks_erode = self.generate_erode_mask(masks, kernal_size=15)
+                # rendered_images = rendered_images.cpu()
+                # if grey_background:
+                #     rendered_images_erode = masks_erode * rendered_images
+                # else:
+                #     inv_masks_erode = (torch.ones_like(masks_erode) - (masks_erode)).float()
+                #     if avg_BG:
+                #         contentsum = torch.sum(torch.sum(masks_erode * rendered_images, 3), 2)
+                #         sumsum = torch.sum(torch.sum(masks_erode, 3), 2)
+                #         contentsum[contentsum == 0] = 0.5
+                #         sumsum[sumsum == 0] = 1
+                #         masked_sum = contentsum / sumsum
+                #         masked_BG = masked_sum.unsqueeze(2).unsqueeze(3).expand(rendered_images.size())
+                #     else:
+                #         masked_BG = 0.5
+                #     rendered_images_erode = masks_erode * rendered_images + inv_masks_erode * masked_BG
 
-                texs_a_crop = []
-                for n in range(bz):
-                    tex_a_crop = self.get_render_from_vertices(rendered_images_erode[n], vertices_in_ori_img[n])
-                    texs_a_crop.append(tex_a_crop)
-                texs = torch.cat(texs_a_crop, 0)
+                # texs_a_crop = []
+                # for n in range(bz):
+                #     tex_a_crop = self.get_render_from_vertices(rendered_images_erode[n], vertices_in_ori_img[n])
+                #     texs_a_crop.append(tex_a_crop)
+                # texs = torch.cat(texs_a_crop, 0)
 
             # render face to rotated pose
             with torch.no_grad():
                 with torch.cuda.device(self.current_gpu):
-                    rendered_images, depths, masks, = self.renderer(vertices, self.faces_use, texs)     # 53215*3， 105840*3， 105840*2*2*2*3
+                    rendered_images = self.renderer(vertices, self.faces_use, texs, 256, 256)     # 53215*3， 105840*3， 105840*2*2*2*3
                     # 是Render的过程，但不是render-to-image的过程，还没有对人脸中错误的像素渲染结果进行修正
                 imgtemp = rendered_images.data[0].cpu().numpy()
-                imgtemp = (np.transpose(imgtemp, (1, 2, 0)) * 255).astype(np.int)
+                imgtemp = (imgtemp * 255).astype(np.int)
                 imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
                 imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
                 imgtemp = imgtemp[:, :, [2, 1, 0]]
                 cv2.imwrite("./imgtemp_0.jpg", imgtemp)
 
-                imgtemp = masks.data.cpu().numpy()
-                imgtemp = (np.transpose(imgtemp, (1, 2, 0)) * 255).astype(np.int)
-                imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
-                imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
-                imgtemp = np.repeat(imgtemp, 3, axis=2)
-                cv2.imwrite("./mask_0.jpg", imgtemp)
-
-                imgtemp = depths.data.cpu().numpy()
-                imgtemp = np.transpose(imgtemp, (1, 2, 0)).astype(np.int)
-                imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
-                imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
-                imgtemp = np.repeat(imgtemp, 3, axis=2)
-                cv2.imwrite("./depths_0.jpg", imgtemp)
+                # imgtemp = masks.data.cpu().numpy()
+                # imgtemp = (np.transpose(imgtemp, (1, 2, 0)) * 255).astype(np.int)
+                # imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
+                # imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
+                # imgtemp = np.repeat(imgtemp, 3, axis=2)
+                # cv2.imwrite("./mask_0.jpg", imgtemp)
+                #
+                # imgtemp = depths.data.cpu().numpy()
+                # imgtemp = np.transpose(imgtemp, (1, 2, 0)).astype(np.int)
+                # imgtemp = np.where(imgtemp >= 0, imgtemp, 0)
+                # imgtemp = np.where(imgtemp <= 255, imgtemp, 255)
+                # imgtemp = np.repeat(imgtemp, 3, axis=2)
+                # cv2.imwrite("./depths_0.jpg", imgtemp)
             # rendered_images = rendered_images.cpu()
             #
             # # get rendered face vertices

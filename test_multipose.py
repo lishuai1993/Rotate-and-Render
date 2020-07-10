@@ -166,7 +166,7 @@ if __name__ == '__main__':
                 img_org = np.minimum(img_org, 255)
                 img_org = np.maximum(img_org, 0)
                 img_org4 = np.transpose(img_org, (1,2, 0))[:,:,[1,0, 2]]
-                cv2.imwrite("./img_org4.jpg", img_org4)
+                # cv2.imwrite("./img_org4.jpg", img_org)
 
                 # 人脸已经完成旋转，并且在图像域，是render_to_image的过程
                 generate_rotated = model.forward(data, mode='single')       # 将人脸中错误的像素点进行修正，

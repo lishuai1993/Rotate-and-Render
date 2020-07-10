@@ -9,8 +9,9 @@ Modified from https://raw.githubusercontent.com/YadiraF/PRNet/master/utils/rende
 __author__ = 'cleardusk'
 
 import numpy as np
-from .cython import mesh_core_cython
-from .params import pncc_code
+import mesh_core_cython
+from params import pncc_code
+import torch
 
 
 def is_point_in_tri(point, tri_points):
@@ -121,6 +122,10 @@ def crender_colors(vertices, triangles, colors, h, w, c=3, BG=None):
     Returns:
         image: [h, w, c]. rendered image./rendering.
     """
+    vertices = vertices.squeeze(0).data.cpu().numpy()
+    triangles = triangles.squeeze(0).data.cpu().numpy()
+    colors = colors.squeeze(0).data.cpu().numpy()
+
 
     if BG is None:
         image = np.zeros((h, w, c), dtype=np.float32)
@@ -141,6 +146,8 @@ def crender_colors(vertices, triangles, colors, h, w, c=3, BG=None):
         vertices.shape[0], triangles.shape[0],
         h, w, c
     )
+
+    image = torch.from_numpy(image).unsqueeze(0).cuda()
     return image
 
 
